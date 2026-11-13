@@ -13,8 +13,8 @@ At the end of every session, update `docs/PROJECT_STATE.md` (status, checklist, 
 - Every business rule (deck validation, Commander 10 budget, price logic) needs **unit tests**.
 - Config/secrets only via environment variables; never print or commit secrets (`.env` is gitignored).
 - Prices are always read from the DB and shown with their collection date; never query LigaMagic on user requests.
-- **Prices are out of scope for now.** No LigaMagic scraping without written permission; no FX conversion. A future BRL "estimativa" must be derived from a manual LigaMagic-vs-Scryfall sample study — never a flat USD→BRL rate.
-- Database: local SQLite/Postgres via `DATABASE_URL` until the new Supabase account/token exists; keep code portable (Postgres-only features like pg_trgm must have a SQLite fallback).
+- **Prices:** Scryfall USD only, always labelled "US$ … (Scryfall)" with date. No LigaMagic scraping without written permission; no FX conversion. A future BRL "estimativa" must be derived from a manual LigaMagic-vs-Scryfall sample study — never a flat USD→BRL rate. Money is currency-explicit (`Money` in `services/commander10.py`).
+- Database: local SQLite by default; Supabase project `mmkzcrrfonqxezccnomb` (schema at Alembic head) when the user puts its connection string in local `.env`. Keep code portable (Postgres-only features like pg_trgm need a SQLite fallback). Remote schema changes without the DB password: `alembic upgrade head --sql` + Management API SQL endpoint. Never reset the DB password; never print tokens/keys.
 - Checks before committing:
   - backend/: `ruff check . && black --check . && mypy app && pytest -q`
   - frontend/: `npm run lint && npm run typecheck && npm run format:check && npm run build`

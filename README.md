@@ -1,8 +1,8 @@
 # Kima's MTG Deck Builder
 
-Montador de decks de **Magic: The Gathering** (Commander) de código aberto, com dados de cartas do Scryfall e preços em reais (R$) da LigaMagic.
+Montador de decks de **Magic: The Gathering** (Commander) de código aberto, com dados de cartas do Scryfall. Por enquanto os preços exibidos são os preços em **dólar (US$) do Scryfall**; preços/estimativas em reais (R$) estão planejados.
 
-> **Status:** v0.1.0 — esqueleto do projeto, em desenvolvimento inicial. Nem todas as funcionalidades abaixo existem ainda.
+> **Status:** v0.2.0 — importação do Scryfall e busca de cartas com filtros prontas. Deck builder, usuários e preços em R$ ainda não existem.
 
 ## Funcionalidades (MVP)
 
@@ -10,7 +10,7 @@ Consulte a especificação completa em [docs/SPEC.md](docs/SPEC.md). Resumo:
 
 - Busca de cartas (dados do Scryfall).
 - Montagem de decks Commander 10 com validação automática das regras.
-- Preços em R$ vindos da LigaMagic, sempre com a data da coleta.
+- Preços sempre com fonte e data. Hoje: US$ do Scryfall (sem conversão). Futuro: estimativa em R$ baseada em estudo manual LigaMagic × Scryfall (nunca câmbio fixo).
 - Cálculo de custo total do deck e do orçamento restante.
 
 ## Regras do Commander 10
@@ -54,7 +54,20 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-A API fica em http://localhost:8000 (verifique `/health`).
+A API fica em http://localhost:8000 (verifique `/health`; busca em `/api/cards`).
+
+Importar as cartas do Scryfall (baixa o Bulk Data "Oracle Cards", ~200 MB, para `backend/data/`, que é ignorado pelo git):
+
+```bash
+python -m app.jobs.scryfall_import            # ou --file caminho/arquivo.jsonl
+```
+
+### Banco no Supabase (opcional)
+
+O projeto Supabase já existe (ref `mmkzcrrfonqxezccnomb`, região us-west-2) com o schema aplicado (migração `0005`).
+Para usar, copie a *connection string* do painel do Supabase (Project Settings → Database → Connection string, modo
+*Session pooler*) e cole **somente no seu `.env` local** como `DATABASE_URL`, trocando o driver para `postgresql+psycopg://`
+e preenchendo sua senha do banco. Nunca faça commit do `.env`.
 
 ### Frontend
 
@@ -98,7 +111,8 @@ npm run build
 ## Créditos
 
 - Dados e imagens de cartas: [Scryfall](https://scryfall.com), conforme as [diretrizes do Scryfall](https://scryfall.com/docs/api/images).
-- Preços: LigaMagic, exibidos sempre com a data da coleta. A coleta (scraping) só deve ser feita após verificar os Termos de Uso e o `robots.txt` do site e obter permissão quando necessário.
+- Preços atuais: US$ do Scryfall (snapshot do Bulk Data), exibidos com a data.
+- LigaMagic: **nenhum dado é coletado**. A coleta automática só acontecerá com permissão por escrito da LigaMagic.
 
 ## Aviso legal
 

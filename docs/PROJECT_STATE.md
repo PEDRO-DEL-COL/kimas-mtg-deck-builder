@@ -8,14 +8,14 @@ Last updated: 2026-11-13
 ## 1. What the project is
 Open-source web app (AGPL-3.0) to build Magic: The Gathering decks, focused on the **Commander 10** format
 (100 cards; commander <= R$ 5,00; sum of all other non-basic-land cards <= R$ 10,00). Card data/images from
-**Scryfall**; Brazilian prices from **LigaMagic** (scraped, cached in DB, always shown with collection date).
+**Scryfall**. Prices: currently **Scryfall USD** (labelled as US$, with date); a BRL "estimativa" is planned (see section 4).
 Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 
 ## 2. Current status
-- Version: **v0.1.0** (pre-release, skeleton). SemVer; changes logged in `CHANGELOG.md` (Keep a Changelog).
-- Roadmap step 1 (skeleton) done, except Docker Compose is written but **untested** (no Docker on the dev machine).
-- Supabase project **not created yet**. The first org (`PEDRO-DEL-COL's Org`, Free) is full (2 active projects) — never touch those projects. **Decision (2026-11-13): the user will create a NEW Supabase account with their second email** and the project will live there. Until a new `SUPABASE_ACCESS_TOKEN` for that account exists, develop against local SQLite/Postgres via `DATABASE_URL`. Tokens are user-level env vars only (never commit/print them).
-- **Prices are OUT OF SCOPE for now** (decision 2026-11-13): the site is built without price features (no scraping, no FX conversion). `PriceTag` and the price tables stay in the code for later.
+- Version: **v0.2.0** (pre-release: Scryfall import + card search + USD prices + Supabase schema). SemVer; changes logged in `CHANGELOG.md` (Keep a Changelog).
+- Roadmap steps 1 and 2 done. Step 1 caveat: Docker Compose is written but **untested** (no Docker on the dev machine).
+- **Supabase:** project in the user's NEW account (org `zepelinho.Org`, second email): name "Kima's MTG Deck Builder", ref `mmkzcrrfonqxezccnomb`, URL `https://mmkzcrrfonqxezccnomb.supabase.co`, region **us-west-2**, pooler host `aws-0-us-west-2.pooler.supabase.com` (session 5432 / transaction 6543). Schema applied up to Alembic `0005` via the Management API SQL endpoint (offline `alembic upgrade head --sql`), pg_trgm in schema `extensions`, RLS enabled on all 7 tables (no policies = deny-by-default for PostgREST; FastAPI connects directly with `DATABASE_URL`). The DB password is known only to the user (never reset it). `SUPABASE_ACCESS_TOKEN` is a user-level env var; the local gitignored `.env` holds `SUPABASE_URL` + anon key only. Advisors: `rls_enabled_no_policy` (INFO, expected), `anon/authenticated_security_definer_function_executable` (WARN — review; likely Supabase-default functions), `unused_index` (INFO, empty DB). The real card data has NOT been imported into Supabase yet (needs the user's DB password in local `.env`).
+- **Prices (decision 2026-11-13, supersedes "no prices for now"):** use **Scryfall USD** prices (`usd`, `usd_foil`, `usd_etched`) stored on `cards` with `prices_updated_at` = bulk date, shown as "US$ … (Scryfall)" with the date. Commander 10 budget is currency-explicit (`Money`); limits stay in BRL, so with USD prices the budget is reported as *not evaluable* (`budget_currency_mismatch`) — never converted with a flat rate. Conversion interface: `app/services/price_estimate.py` (TODO).
 - Repo location (since 2026-11-13): `C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder` (moved out of OneDrive).
 
 ## 3. DONE
@@ -35,24 +35,28 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 - [x] pre-commit installed in `backend/.venv` (LICENSE excluded from whitespace hooks to keep the official text)
 - [x] README (PT-BR), CONTRIBUTING (PT-BR), CHANGELOG, this file, `CLAUDE.md`
 - [x] Tag `v0.1.0` + GitHub pre-release
+- [x] v0.2.0: Scryfall importer (`python -m app.jobs.scryfall_import`, JSON/JSONL streaming, verified on the real oracle_cards file: 35,319 cards imported in ~14 s into SQLite), search API `GET /api/cards` + `GET /api/cards/{id}`, frontend search page (filters, grid, detail modal, hash URLs `#/busca?...`), USD prices, migrations 0002–0005, Supabase schema applied. Backend 65 tests.
 
 ## 4. TODO / next steps (mapped to SPEC section 10)
 1. **Skeleton (step 1)** — remaining:
-   - [ ] Create Supabase project in the user's account once `SUPABASE_ACCESS_TOKEN` is available; put the
-         connection string only in local `.env` / deploy secrets; run `alembic upgrade head` against it.
+   - [x] Supabase project created (new account) and schema applied (see section 2).
+   - [ ] User pastes the Supabase connection string (with DB password) into local `.env`; then run the Scryfall import against Supabase.
+   - [ ] Review the 2 WARN security advisors (security-definer functions executable by anon/authenticated).
    - [ ] Test `docker compose up` on a machine with Docker (or skip in favour of hosted deploy).
-   - [ ] Add pg_trgm extension + trigram indexes as an **optional Postgres-only** migration path; SQLite keeps a plain LIKE fallback (code must stay portable).
+   - [x] pg_trgm + trigram indexes as optional Postgres-only migration (0003); SQLite uses LIKE.
 2. **Scryfall import + search (step 2)**
-   - [ ] Job `jobs/scryfall_import.py`: download Bulk Data (`oracle_cards`), upsert `cards`, keep only needed fields + image URLs (never host images). Respect Scryfall API guidelines (User-Agent, 50–100 ms between requests).
-   - [ ] Search API `GET /cards` with filters: color identity, colors, type, subtype, CMC, oracle text, rarity, commander legality, BRL price range.
-   - [ ] Frontend search page with filters.
+   - [x] Scryfall importer, search API (incl. USD price range filter), frontend search page.
+   - [ ] Schedule the import daily (APScheduler worker).
+   - [ ] Cheapest printing: oracle_cards keeps one printing per card; compute min USD across printings from `default_cards` (TODO in importer).
+   - [ ] PT-BR card names (`printed_name_pt`) from `all_cards` bulk (lang=pt).
+   - [ ] Mana symbols rendering in the UI; browser test of the search page against the real API.
 3. **Deck builder + Commander 10 validation (step 3)**
    - [ ] Deck endpoints using `services/commander10.py`; partner/background commanders (TODO in validator).
    - [ ] Frontend deck builder: commander pick, add/remove, group by type and mana curve, 100-card counter, live budget meter.
    - [ ] Import/export plain text lists ("1 Card Name") compatible with LigaMagic, Moxfield, TopDecked.
 4. **LigaMagic prices (step 4)**
    - [x] Research done 2026-11-13: robots.txt for `*` sets `Crawl-delay: 360` (1 req / 6 min) and blocks price-history and several other paths; all pages return HTTP 403 (Cloudflare) to automated clients; Terms of Use could not be read; no official API/feed found. Contact (unconfirmed): suporte@ligamagic.com.br. **Verdict: do NOT scrape without written permission.**
-   - **Prices are out of scope for now** (user decision 2026-11-13). No scraping, no FX conversion until the steps below are done.
+   - Current prices: Scryfall USD only (no conversion). BRL estimate only after the steps below.
    - [ ] Email LigaMagic asking permission/feed (hobby, open source, low volume, identified User-Agent, credit + link). **Scraping stays forbidden without written permission** (robots.txt Crawl-delay 360, Cloudflare 403, ToS unread).
    - [ ] **Manual price research by Claude** (no automated collection): for a sample of cards (varied rarity, format staples vs. bulk, foil/non-foil, old vs. new), manually compare real LigaMagic BRL prices with Scryfall USD prices; check whether BRL tracks a plain FX conversion or follows another rule (rarity, format demand, foil, reprint status, etc.); document the evidence in `docs/` and derive the "estimativa" rule from it. **NEVER assume a flat conversion such as USD 1.00 = R$ 5.00.**
    - [ ] Only after that research: implement the "estimativa" (labelled as such, with date) + a plain search link to LigaMagic (no data collected).
@@ -71,8 +75,8 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 - **Always keep this process/TODO file updated.**
 - **Ask the user whenever in doubt.**
 - User's browser: **Zen Browser** — `C:\Users\Pedro.Col\AppData\Local\Zen Browser\zen.exe` (use it to open local pages for the user).
-- The Supabase project will be created in a **new Supabase account (user's second email)** once a new `SUPABASE_ACCESS_TOKEN` is available; until then use local SQLite/Postgres.
-- Prices are out of scope for now; later do a manual LigaMagic-vs-Scryfall price study before any "estimativa" rule. Never assume a flat USD→BRL conversion. No LigaMagic scraping without written permission.
+- Supabase lives in the user's **second account** (org `zepelinho.Org`), project ref `mmkzcrrfonqxezccnomb`. Never reset the DB password; never print/commit tokens or keys. The old (first-account) token should be revoked by the user.
+- Prices: show Scryfall USD clearly labelled as US$ with date. Later do a manual LigaMagic-vs-Scryfall price study before any BRL "estimativa" rule. Never assume a flat USD→BRL conversion. No LigaMagic scraping without written permission.
 - Agent policy: one Opus PM coordinates; implementation delegated to small, well-scoped Sonnet workers. A second Opus agent requires user approval.
 - Never print or commit secrets.
 
@@ -96,7 +100,11 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 | **LigaMagic scraping** | No official API. Must check ToS and robots.txt and **ask permission before production**; credits/links do not replace permission. Polite rate limits, identified User-Agent. |
 | **Prices always read from DB** with collection date | Never hit LigaMagic during user browsing; every price shown as "Preço LigaMagic em DD/MM/AAAA"; failures keep the last valid price. |
 | New Supabase account (user's 2nd email) | First org is Free and full; keeps projects separate. Local SQLite/Postgres meanwhile. |
-| Prices out of scope for now | No legal price source yet (LigaMagic forbids automated access without permission). Build search/deck features first. |
+| Scryfall USD prices for now (supersedes "prices out of scope") | Legal, free source already in the bulk data; shown explicitly as US$ with date. LigaMagic forbids automated access without permission. |
+| Currency-explicit budget (`Money`) | Limits are BRL (spec); USD prices make the budget "not evaluable" instead of silently converting. Conversion is a separate TODO module. |
+| Second Supabase account (us-west-2) | First org's Free plan was full. us-west-2 is farther from Brazil than sa-east-1 (higher latency) — known tradeoff; the project can be recreated in sa-east-1 later. |
+| Schema applied via Management API (offline SQL) | DB password unknown to the agent and must not be reset; Alembic `alembic_version` is set so later online `alembic upgrade` works. |
+| RLS on, no policies | Backend uses a direct DB connection; PostgREST (anon/authenticated) gets nothing by default. |
 | Evidence-based BRL "estimativa" | BRL market prices may not follow FX (rarity/demand/foil/reprints); the rule must come from a manual sample comparison, never a flat rate. |
 | Portable search (no Postgres-only features required) | pg_trgm only as optional Postgres migration path; SQLite uses LIKE. Color filters use denormalised WUBRG string keys (`colors_key`, `color_identity_key`). |
 | Money as `Decimal` / `Numeric(10,2)` | Exact BRL budget comparisons (5.00 / 10.00 boundaries). |
@@ -105,7 +113,7 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 ## 8. Repo and accounts (no secrets here)
 - GitHub: https://github.com/PEDRO-DEL-COL/kimas-mtg-deck-builder (public, owner `PEDRO-DEL-COL`).
 - Commit identity (local repo config): `PEDRO-DEL-COL` / GitHub noreply email.
-- Supabase: not created yet. Credentials will live only in `.env` (gitignored) and deploy secrets.
+- Supabase: second account, org `zepelinho.Org`, project ref `mmkzcrrfonqxezccnomb` (us-west-2), `https://mmkzcrrfonqxezccnomb.supabase.co`. Credentials only in local `.env` (gitignored), user-level env vars and deploy secrets.
 
 ## 9. How to run
 Backend (from `backend/`):
