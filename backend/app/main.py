@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import api_router
+from app.api import api_router, cards
 from app.core.config import get_settings
 
 
@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.include_router(api_router)
+    application.include_router(cards.router)
     return application
 
 
