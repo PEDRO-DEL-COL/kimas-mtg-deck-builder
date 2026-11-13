@@ -1,5 +1,7 @@
 """Scryfall Bulk Data importer.
 
+Supports both JSON-array and JSON Lines bulk files (Scryfall now serves JSON Lines).
+
 Downloads the bulk file (``oracle_cards`` by default), streams it without loading it
 whole into memory, maps each card to a ``cards`` row and upserts it.
 
@@ -17,6 +19,8 @@ Usage::
 import argparse
 import json
 import logging
+import re
+import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -38,6 +42,7 @@ BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
 BATCH_SIZE = 1000
 CHUNK_SIZE = 1024 * 1024
 WUBRG = "WUBRG"
+GZIP_MAGIC = b"\x1f\x8b"
 SKIPPED_LAYOUTS = frozenset(
     {
         "token",
@@ -68,6 +73,14 @@ class BulkMetadata:
     download_uri: str
     updated_at: str
 
+    @property
+    def extension(self) -> str:
+        """File extension for the saved file: JSON Lines or a JSON array."""
+        path = self.download_uri.split("?", 1)[0]
+        if path.endswith(".gz"):
+            path = path[:-3]
+        return ".jsonl" if path.endswith(".jsonl") else ".json"
+
 
 def _headers() -> dict[str, str]:
     return {
@@ -80,7 +93,11 @@ def fetch_bulk_metadata(client: httpx.Client, bulk_type: str) -> BulkMetadata:
     response = client.get(f"{BULK_DATA_URL}/{bulk_type}", headers=_headers())
     response.raise_for_status()
     data = response.json()
-    return BulkMetadata(download_uri=str(data["download_uri"]), updated_at=str(data["updated_at"]))
+    # Scryfall now serves JSON Lines (`jsonl_download_uri`); keep the old key as a fallback.
+    uri = data.get("jsonl_download_uri") or data.get("download_uri")
+    if not uri:
+        raise ValueError(f"Bulk data entry for {bulk_type!r} has no download URI")
+    return BulkMetadata(download_uri=str(uri), updated_at=str(data["updated_at"]))
 
 
 def download_bulk_file(
@@ -92,7 +109,7 @@ def download_bulk_file(
     """Download the bulk file unless today's version already exists; prune older files."""
     directory = data_dir if data_dir is not None else Path(get_settings().SCRYFALL_DATA_DIR)
     directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{bulk_type}-{metadata.updated_at[:10]}.json"
+    target = directory / f"{bulk_type}-{metadata.updated_at[:10]}{metadata.extension}"
     if target.exists():
         logger.info("Bulk file already present: %s", target)
     else:
@@ -101,17 +118,59 @@ def download_bulk_file(
         with client.stream("GET", metadata.download_uri, headers=_headers()) as response:
             response.raise_for_status()
             with part.open("wb") as fh:
-                for chunk in response.iter_bytes(CHUNK_SIZE):
+                for chunk in _decoded_chunks(response, metadata.download_uri):
                     fh.write(chunk)
         part.replace(target)
-    for old in directory.glob(f"{bulk_type}-*.json"):
-        if old.name < target.name:
-            logger.info("Removing old bulk file %s", old)
-            old.unlink()
+    for pattern in (f"{bulk_type}-*.json", f"{bulk_type}-*.jsonl"):
+        for old in directory.glob(pattern):
+            if old.name < target.name:
+                logger.info("Removing old bulk file %s", old)
+                old.unlink()
     return target
 
 
+def _decoded_chunks(response: httpx.Response, uri: str) -> Iterator[bytes]:
+    """Yield body bytes; httpx already undoes Content-Encoding, a `.gz` URI is gunzipped here."""
+    gunzip = uri.split("?", 1)[0].endswith(".gz")
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    first = True
+    for chunk in response.iter_bytes(CHUNK_SIZE):
+        if gunzip and first and not chunk.startswith(GZIP_MAGIC):
+            gunzip = False  # already decoded by the transport
+        first = False
+        yield decompressor.decompress(chunk) if gunzip else chunk
+    if gunzip:
+        tail = decompressor.flush()
+        if tail:
+            yield tail
+
+
 def iter_bulk_cards(path: Path, chunk_size: int = CHUNK_SIZE) -> Iterator[CardJson]:
+    """Stream card objects from a bulk file: a JSON array or JSON Lines (auto-detected)."""
+    with path.open("r", encoding="utf-8") as fh:
+        head = ""
+        while not head.strip():
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                return
+            head += chunk
+    if head.lstrip()[0] == "[":
+        yield from _iter_json_array(path, chunk_size)
+    else:
+        yield from _iter_json_lines(path)
+
+
+def _iter_json_lines(path: Path) -> Iterator[CardJson]:
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                yield obj
+
+
+def _iter_json_array(path: Path, chunk_size: int) -> Iterator[CardJson]:
     """Stream the objects of a top-level JSON array without loading the whole file."""
     decoder = json.JSONDecoder()
     buffer = ""
@@ -154,7 +213,36 @@ def _faces(card: CardJson) -> list[CardJson]:
     return [f for f in faces if isinstance(f, dict)] if isinstance(faces, list) else []
 
 
-def card_to_row(card: CardJson) -> CardRow | None:
+def _price(card: CardJson, key: str) -> Decimal | None:
+    value = (card.get("prices") or {}).get(key)
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value))
+    except ArithmeticError:
+        return None
+
+
+def parse_updated_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+_FILENAME_DATE = re.compile(r"-(\d{4}-\d{2}-\d{2})$")
+
+
+def updated_at_from_filename(path: Path) -> datetime | None:
+    """Derive the snapshot date from a ``<type>-<YYYY-MM-DD>`` file name, if possible."""
+    match = _FILENAME_DATE.search(path.stem)
+    return parse_updated_at(match.group(1)) if match else None
+
+
+def card_to_row(card: CardJson, prices_updated_at: datetime | None = None) -> CardRow | None:
     if card.get("layout") in SKIPPED_LAYOUTS:
         return None
     faces = _faces(card)
@@ -199,6 +287,13 @@ def card_to_row(card: CardJson) -> CardRow | None:
         "legal_commander": legalities.get("commander") == "legal",
         "image_url": image_url,
         "scryfall_uri": card.get("scryfall_uri"),
+        # TODO: oracle_cards picks one printing per card, so this price may not be the
+        # cheapest printing; a later improvement is computing the minimum USD across all
+        # printings from default_cards.
+        "price_usd": _price(card, "usd"),
+        "price_usd_foil": _price(card, "usd_foil"),
+        "price_usd_etched": _price(card, "usd_etched"),
+        "prices_updated_at": prices_updated_at,
     }
 
 
@@ -242,13 +337,18 @@ def upsert_cards(session: Session, rows: Iterable[CardRow]) -> int:
     return total
 
 
-def import_file(session: Session, path: Path, chunk_size: int = CHUNK_SIZE) -> ImportStats:
+def import_file(
+    session: Session,
+    path: Path,
+    chunk_size: int = CHUNK_SIZE,
+    prices_updated_at: datetime | None = None,
+) -> ImportStats:
     stats = ImportStats()
 
     def rows() -> Iterator[CardRow]:
         for card in iter_bulk_cards(path, chunk_size):
             stats.seen += 1
-            row = card_to_row(card)
+            row = card_to_row(card, prices_updated_at)
             if row is None:
                 stats.skipped += 1
                 continue
@@ -265,13 +365,17 @@ def import_file(session: Session, path: Path, chunk_size: int = CHUNK_SIZE) -> I
 
 
 def run_import(bulk_type: str | None = None, file: Path | None = None) -> ImportStats:
+    prices_at: datetime | None = None
     if file is None:
         kind = bulk_type or get_settings().SCRYFALL_BULK_TYPE
         with httpx.Client(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
             metadata = fetch_bulk_metadata(client, kind)
             file = download_bulk_file(client, kind, metadata)
+            prices_at = parse_updated_at(metadata.updated_at)
+    else:
+        prices_at = updated_at_from_filename(file)
     with SessionLocal() as session:
-        return import_file(session, file)
+        return import_file(session, file, prices_updated_at=prices_at)
 
 
 def main(argv: list[str] | None = None) -> None:

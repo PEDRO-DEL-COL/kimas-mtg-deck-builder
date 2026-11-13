@@ -1,3 +1,4 @@
+import gzip
 import json
 from collections.abc import Iterator
 from decimal import Decimal
@@ -156,3 +157,105 @@ def test_fetch_metadata_and_download(tmp_path: Path) -> None:
         n = len(requests)
         imp.download_bulk_file(client, "oracle_cards", meta, tmp_path)
         assert len(requests) == n  # already downloaded: no new request
+
+
+def _write_jsonl(path: Path, cards: list[dict[str, Any]], *, blank_lines: bool = True) -> Path:
+    sep = "\n\n" if blank_lines else "\n"
+    path.write_text(sep.join(json.dumps(c) for c in cards) + "\n", encoding="utf-8")
+    return path
+
+
+def test_jsonl_parser_matches_json_load(tmp_path: Path, cards: list[dict[str, Any]]) -> None:
+    path = _write_jsonl(tmp_path / "oracle_cards-2024-05-06.jsonl", cards)
+    assert list(imp.iter_bulk_cards(path)) == cards
+    assert list(imp.iter_bulk_cards(path, chunk_size=16)) == cards
+    padded = tmp_path / "padded.jsonl"
+    padded.write_text("\n  \n" + path.read_text(encoding="utf-8"), encoding="utf-8")
+    assert list(imp.iter_bulk_cards(padded)) == cards
+
+
+def _jsonl_transport(requests: list[httpx.Request], *, gz: bool = False) -> httpx.MockTransport:
+    cards = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    body = ("\n".join(json.dumps(c) for c in cards) + "\n").encode()
+    suffix = ".jsonl.gz" if gz else ".jsonl"
+    payload = gzip.compress(body) if gz else body
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/bulk-data/oracle_cards":
+            return httpx.Response(
+                200,
+                json={
+                    "object": "bulk_data",
+                    "jsonl_download_uri": f"https://data.scryfall.io/oracle-cards/x{suffix}",
+                    "updated_at": "2024-05-06T09:03:07.123+00:00",
+                },
+            )
+        return httpx.Response(200, content=payload)
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.mark.parametrize("gz", [False, True])
+def test_jsonl_metadata_and_download(tmp_path: Path, cards: list[dict[str, Any]], gz: bool) -> None:
+    old = tmp_path / "oracle_cards-2024-01-01.json"
+    old.write_text("[]")
+    with httpx.Client(transport=_jsonl_transport([], gz=gz)) as client:
+        meta = imp.fetch_bulk_metadata(client, "oracle_cards")
+        assert meta.download_uri.endswith(".jsonl.gz" if gz else ".jsonl")
+        path = imp.download_bulk_file(client, "oracle_cards", meta, tmp_path)
+    assert path.name == "oracle_cards-2024-05-06.jsonl"
+    assert not old.exists()
+    assert list(imp.iter_bulk_cards(path)) == cards
+
+
+def test_metadata_without_any_download_uri_fails() -> None:
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json={"updated_at": "x"}))
+    with httpx.Client(transport=transport) as client, pytest.raises(ValueError):
+        imp.fetch_bulk_metadata(client, "oracle_cards")
+
+
+def test_prices_mapped_to_decimal() -> None:
+    card = {
+        "id": "p1",
+        "oracle_id": "o1",
+        "layout": "normal",
+        "name": "P",
+        "cmc": 1,
+        "prices": {"usd": "0.25", "usd_foil": None, "usd_etched": "3.10", "eur": "1.00"},
+    }
+    at = imp.parse_updated_at("2024-05-06T09:03:07.123+00:00")
+    row = imp.card_to_row(card, at)
+    assert row is not None
+    assert row["price_usd"] == Decimal("0.25")
+    assert row["price_usd_foil"] is None
+    assert row["price_usd_etched"] == Decimal("3.10")
+    assert row["prices_updated_at"] == at
+    bare = imp.card_to_row({k: v for k, v in card.items() if k != "prices"})
+    assert bare is not None
+    assert bare["price_usd"] is None and bare["prices_updated_at"] is None
+
+
+def test_updated_at_from_filename() -> None:
+    got = imp.updated_at_from_filename(Path("data/oracle_cards-2024-05-06.jsonl"))
+    assert got is not None and got.date().isoformat() == "2024-05-06"
+    assert imp.updated_at_from_filename(Path("oracle_cards_sample.json")) is None
+
+
+def test_import_persists_prices(session: Session, tmp_path: Path) -> None:
+    card = {
+        "id": "p1",
+        "oracle_id": "o1",
+        "layout": "normal",
+        "name": "P",
+        "cmc": 1,
+        "prices": {"usd": "0.25", "usd_foil": "1.50", "usd_etched": None},
+    }
+    path = _write_jsonl(tmp_path / "oracle_cards-2024-05-06.jsonl", [card])
+    at = imp.updated_at_from_filename(path)
+    imp.import_file(session, path, prices_updated_at=at)
+    got = session.get(Card, "p1")
+    assert got is not None
+    assert got.price_usd == Decimal("0.25") and got.price_usd_foil == Decimal("1.50")
+    assert got.price_usd_etched is None
+    assert got.prices_updated_at is not None and got.prices_updated_at.year == 2024
