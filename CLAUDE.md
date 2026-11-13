@@ -13,7 +13,8 @@ At the end of every session, update `docs/PROJECT_STATE.md` (status, checklist, 
 - Every business rule (deck validation, Commander 10 budget, price logic) needs **unit tests**.
 - Config/secrets only via environment variables; never print or commit secrets (`.env` is gitignored).
 - Prices are always read from the DB and shown with their collection date; never query LigaMagic on user requests.
-- LigaMagic scraping: check ToS/robots.txt and get permission before production use.
+- **Prices are out of scope for now.** No LigaMagic scraping without written permission; no FX conversion. A future BRL "estimativa" must be derived from a manual LigaMagic-vs-Scryfall sample study — never a flat USD→BRL rate.
+- Database: local SQLite/Postgres via `DATABASE_URL` until the new Supabase account/token exists; keep code portable (Postgres-only features like pg_trgm must have a SQLite fallback).
 - Checks before committing:
   - backend/: `ruff check . && black --check . && mypy app && pytest -q`
   - frontend/: `npm run lint && npm run typecheck && npm run format:check && npm run build`
@@ -33,4 +34,6 @@ At the end of every session, update `docs/PROJECT_STATE.md` (status, checklist, 
 ## Environment notes
 - Repo lives outside OneDrive (`C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder` on the main dev machine). Keep `node_modules`, `.venv`, caches and data dumps gitignored.
 - Windows dev machine; no Docker and no Supabase CLI locally (`npx supabase` acceptable).
-- The path contains `´` (Pedro´s Codes): quote paths in shell commands.
+- Repo path: `C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder`. If the venv was moved, its `Scripts/*.exe` launchers break: call tools via `backend/.venv/Scripts/python.exe -m <tool>` (or recreate the venv).
+- Python writes on Windows: use `newline="
+"` to keep LF line endings.
