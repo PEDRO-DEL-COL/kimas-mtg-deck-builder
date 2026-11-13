@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -13,6 +14,7 @@ from app.main import app
 from app.models.card import Card
 
 DASH = "—"
+PRICES = {"c1": "0.25", "c2": "1.50", "c3": "1.50", "c7": "9999.99"}
 
 
 def _card(
@@ -122,7 +124,13 @@ def db_client() -> Iterator[TestClient]:
     Base.metadata.create_all(engine)
     maker = sessionmaker(bind=engine, expire_on_commit=False)
     with maker() as s:
-        s.add_all(make_seed())
+        seed = make_seed()
+        for c in seed:
+            if c.id in PRICES:
+                c.price_usd = Decimal(PRICES[c.id])
+        seed[0].price_usd_foil = Decimal("1.10")
+        seed[0].prices_updated_at = datetime(2024, 5, 6, 9, 3, tzinfo=UTC)
+        s.add_all(seed)
         s.commit()
 
     def override() -> Iterator[Session]:
@@ -156,6 +164,8 @@ def test_list_all_default_sort_and_shape(db_client: TestClient) -> None:
     assert set(first) == {
         "id", "oracle_id", "name", "printed_name_pt", "mana_cost", "cmc", "type_line",
         "colors", "color_identity", "rarity", "legal_commander", "image_url",
+        "price_usd", "price_usd_foil", "price_usd_etched", "prices_updated_at",
+        "price_currency", "price_source",
     }  # fmt: skip
     assert isinstance(first["cmc"], float)
 
@@ -250,7 +260,7 @@ def test_combined_filters(db_client: TestClient) -> None:
         {"colors": "WZ"},
         {"rarity": "legendary"},
         {"identity_mode": "bogus"},
-        {"sort": "price"},
+        {"sort": "bogus"},
         {"page": 0},
         {"page_size": 0},
         {"page_size": 101},
@@ -275,3 +285,35 @@ def test_card_not_found(db_client: TestClient) -> None:
     r = db_client.get("/api/cards/nope")
     assert r.status_code == 404
     assert r.json() == {"detail": "Card not found"}
+
+
+def test_price_fields_in_summary_and_detail(db_client: TestClient) -> None:
+    for body in (
+        db_client.get("/api/cards", params={"q": "bolt"}).json()["items"][0],
+        db_client.get("/api/cards/c1").json(),
+    ):
+        assert body["price_usd"] == "0.25"
+        assert body["price_usd_foil"] == "1.10"
+        assert body["price_usd_etched"] is None
+        assert body["prices_updated_at"].startswith("2024-05-06T09:03")
+        assert body["price_currency"] == "USD"
+        assert body["price_source"] == "Scryfall"
+    unpriced = db_client.get("/api/cards/c4").json()
+    assert unpriced["price_usd"] is None and unpriced["prices_updated_at"] is None
+    assert unpriced["price_currency"] == "USD" and unpriced["price_source"] == "Scryfall"
+
+
+def test_price_filters_exclude_null_and_are_inclusive(db_client: TestClient) -> None:
+    assert set(ids(db_client, price_min=0)) == {"c1", "c2", "c3", "c7"}
+    assert set(ids(db_client, price_max=1.5)) == {"c1", "c2", "c3"}
+    assert set(ids(db_client, price_min=1.5, price_max=1.5)) == {"c2", "c3"}
+    assert ids(db_client, price_min=100) == ["c7"]
+    assert ids(db_client, price_min=5000, price_max=6000) == []
+
+
+def test_sort_by_price_nulls_last(db_client: TestClient) -> None:
+    order = ids(db_client, sort="price")
+    assert order[:4] == ["c1", "c2", "c3", "c7"]  # 0.25, 1.50 (Counterspell, Sol Ring), 9999.99
+    rest = order[4:]
+    assert len(rest) == 6
+    assert ids(db_client, sort="price", price_min=1) == ["c2", "c3", "c7"]

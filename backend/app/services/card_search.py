@@ -12,7 +12,7 @@ from app.models.card import Card
 WUBRG = "WUBRG"
 VALID_RARITIES = ("common", "uncommon", "rare", "mythic", "special", "bonus")
 ColorMode = Literal["subset", "exact", "superset"]
-SortKey = Literal["name", "cmc"]
+SortKey = Literal["name", "cmc", "price"]
 DASH = "—"
 _ESC = "\\"
 
@@ -32,6 +32,8 @@ class CardSearchParams:
     subtype: str | None = None
     cmc_min: float | None = None
     cmc_max: float | None = None
+    price_min: float | None = None
+    price_max: float | None = None
     text: str | None = None
     rarity: str | None = None
     commander_legal: bool | None = None
@@ -109,6 +111,11 @@ def build_filters(p: CardSearchParams) -> list[ColumnElement[bool]]:
         conds.append(Card.cmc >= Decimal(str(p.cmc_min)))
     if p.cmc_max is not None:
         conds.append(Card.cmc <= Decimal(str(p.cmc_max)))
+    # Comparisons against NULL are never true, so cards without a price drop out.
+    if p.price_min is not None:
+        conds.append(Card.price_usd >= Decimal(str(p.price_min)))
+    if p.price_max is not None:
+        conds.append(Card.price_usd <= Decimal(str(p.price_max)))
     if p.text:
         conds.append(_contains(Card.oracle_text, p.text))
     if p.rarity:
@@ -124,6 +131,8 @@ def search_cards(db: Session, p: CardSearchParams) -> tuple[list[Card], int]:
     stmt = select(Card).where(*conds)
     if p.sort == "cmc":
         stmt = stmt.order_by(Card.cmc, Card.name, Card.id)
+    elif p.sort == "price":
+        stmt = stmt.order_by(Card.price_usd.is_(None), Card.price_usd, Card.name, Card.id)
     else:
         stmt = stmt.order_by(Card.name, Card.id)
     stmt = stmt.offset((p.page - 1) * p.page_size).limit(p.page_size)

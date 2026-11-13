@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,6 +20,13 @@ class CardSummary(BaseModel):
     rarity: str | None = None
     legal_commander: bool = False
     image_url: str | None = None
+    # Scryfall USD prices (Decimals serialise as JSON strings, e.g. "0.25").
+    price_usd: Decimal | None = None
+    price_usd_foil: Decimal | None = None
+    price_usd_etched: Decimal | None = None
+    prices_updated_at: datetime | None = None
+    price_currency: Literal["USD"] = "USD"
+    price_source: Literal["Scryfall"] = "Scryfall"
 
 
 class CardDetail(CardSummary):
