@@ -11,6 +11,7 @@ class Card(Base):
     __table_args__ = (
         Index("ix_cards_name", "name"),
         Index("ix_cards_oracle_id", "oracle_id"),
+        Index("ix_cards_cmc", "cmc"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)  # scryfall_id
@@ -23,6 +24,10 @@ class Card(Base):
     oracle_text: Mapped[str | None] = mapped_column(Text)
     colors: Mapped[list[str]] = mapped_column(JSON, default=list)
     color_identity: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Denormalised color keys in WUBRG order (e.g. "WUB", "" for colorless) so that color
+    # filters work with plain string predicates on both SQLite and PostgreSQL.
+    colors_key: Mapped[str] = mapped_column(String(5), default="")
+    color_identity_key: Mapped[str] = mapped_column(String(5), default="")
     rarity: Mapped[str | None] = mapped_column(String(20))
     legal_commander: Mapped[bool] = mapped_column(default=False)
     image_url: Mapped[str | None] = mapped_column(String(500))
