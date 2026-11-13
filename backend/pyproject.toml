@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kimas-mtg-backend"
-version = "0.1.0"
+version = "0.2.0"
 description = "Backend API for Kima's MTG Deck Builder"
 requires-python = ">=3.12"
 license = { text = "AGPL-3.0-or-later" }
