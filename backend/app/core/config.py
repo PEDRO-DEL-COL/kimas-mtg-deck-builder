@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "change-me"
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
     SCRYFALL_BULK_TYPE: str = "oracle_cards"
+    # Where downloaded Scryfall bulk files are stored (relative to cwd; gitignored).
+    SCRYFALL_DATA_DIR: str = "data/scryfall"
+    SCRYFALL_USER_AGENT: str = (
+        "KimasMTGDeckBuilder/0.2 (+https://github.com/PEDRO-DEL-COL/kimas-mtg-deck-builder)"
+    )
     LIGAMAGIC_USER_AGENT: str = (
         "KimasMTGDeckBuilder/0.1 (+https://github.com/PEDRO-DEL-COL/kimas-mtg-deck-builder)"
     )
