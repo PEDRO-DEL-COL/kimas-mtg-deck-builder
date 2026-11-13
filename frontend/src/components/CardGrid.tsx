@@ -1,5 +1,7 @@
 import type { CardSearchState } from '../hooks/useCardSearch.ts'
 import type { CardSummary } from '../api/cards.ts'
+import { formatDate } from '../lib/format.ts'
+import PriceTag from './PriceTag.tsx'
 
 interface Props {
   state: CardSearchState
@@ -36,6 +38,15 @@ function CardTile({ card, onSelect }: { card: CardSummary; onSelect: (c: CardSum
           </span>
         )}
       </button>
+      <div className="mt-1 text-center">
+        <PriceTag
+          amount={card.price_usd}
+          currency={card.price_currency}
+          source={card.price_source}
+          collectedAt={null}
+          compact
+        />
+      </div>
     </li>
   )
 }
@@ -61,6 +72,7 @@ export default function CardGrid({ state, page, onPage, onSelect }: Props) {
     )
   }
 
+  const pricesDate = data.items[0]?.prices_updated_at ?? null
   const totalPages = Math.max(1, Math.ceil(data.total / data.page_size))
 
   return (
@@ -70,6 +82,11 @@ export default function CardGrid({ state, page, onPage, onSelect }: Props) {
           ? '1 carta encontrada'
           : `${data.total.toLocaleString('pt-BR')} cartas encontradas`}
       </p>
+      {pricesDate && (
+        <p className="text-xs text-muted">
+          Preços em dólar (US$) do Scryfall, atualizados em {formatDate(pricesDate)}
+        </p>
+      )}
 
       {data.items.length === 0 ? (
         <div className="rounded-card border border-border bg-surface p-8 text-center text-muted">

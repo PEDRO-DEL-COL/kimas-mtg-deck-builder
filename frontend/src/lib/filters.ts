@@ -10,10 +10,12 @@ export interface SearchFilters {
   subtype: string
   cmcMin: string
   cmcMax: string
+  priceMin: string
+  priceMax: string
   text: string
   rarity: string[]
   commanderLegal: boolean
-  sort: 'name' | 'cmc'
+  sort: 'name' | 'cmc' | 'price'
   page: number
 }
 
@@ -31,6 +33,8 @@ export const EMPTY_FILTERS: SearchFilters = {
   subtype: '',
   cmcMin: '',
   cmcMax: '',
+  priceMin: '',
+  priceMax: '',
   text: '',
   rarity: [],
   commanderLegal: false,
@@ -40,6 +44,10 @@ export const EMPTY_FILTERS: SearchFilters = {
 
 function parseMode(value: string | null): SetMode {
   return value === 'exact' || value === 'superset' ? value : 'subset'
+}
+
+function parseSort(value: string | null): SearchFilters['sort'] {
+  return value === 'cmc' || value === 'price' ? value : 'name'
 }
 
 function parseLetters(value: string | null): string[] {
@@ -60,10 +68,12 @@ export function filtersFromSearch(search: string): SearchFilters {
     subtype: p.get('subtype') ?? '',
     cmcMin: p.get('cmc_min') ?? '',
     cmcMax: p.get('cmc_max') ?? '',
+    priceMin: p.get('price_min') ?? '',
+    priceMax: p.get('price_max') ?? '',
     text: p.get('text') ?? '',
     rarity: (p.get('rarity') ?? '').split(',').filter((r) => RARITIES.includes(r)),
     commanderLegal: p.get('commander_legal') === 'true',
-    sort: p.get('sort') === 'cmc' ? 'cmc' : 'name',
+    sort: parseSort(p.get('sort')),
     page: Number.isFinite(page) && page > 0 ? page : 1,
   }
 }
@@ -85,6 +95,8 @@ export function filtersToParams(f: SearchFilters): CardSearchParams {
     subtype: f.subtype.trim(),
     cmc_min: toNumber(f.cmcMin),
     cmc_max: toNumber(f.cmcMax),
+    price_min: toNumber(f.priceMin),
+    price_max: toNumber(f.priceMax),
     text: f.text.trim(),
     rarity: f.rarity.join(','),
     commander_legal: f.commanderLegal ? true : undefined,
@@ -109,6 +121,8 @@ export function filtersToSearch(f: SearchFilters): string {
   set('subtype', f.subtype)
   set('cmc_min', f.cmcMin)
   set('cmc_max', f.cmcMax)
+  set('price_min', f.priceMin)
+  set('price_max', f.priceMax)
   set('text', f.text)
   set('rarity', f.rarity.join(','))
   if (f.commanderLegal) p.set('commander_legal', 'true')

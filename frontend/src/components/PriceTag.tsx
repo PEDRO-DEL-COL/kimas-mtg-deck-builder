@@ -1,30 +1,52 @@
+import { formatDate } from '../lib/format.ts'
+
 interface PriceTagProps {
-  /** Price in BRL. */
-  value: number
-  /** ISO date string or Date of when the price was collected. */
-  collectedAt: string | Date
-  /** True when the price exceeds the Commander 10 budget. */
+  amount: string | number | null
+  currency: 'USD' | 'BRL'
+  source: string
+  /** ISO date string of when the price was collected. */
+  collectedAt: string | null
+  /** When defined, colors green (within budget) or red (over budget). */
   overBudget?: boolean
+  label?: string
+  /** Smaller text for dense lists. */
+  compact?: boolean
 }
 
-const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-const dateFormat = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-})
+function formatAmount(amount: string | number, currency: 'USD' | 'BRL'): string | null {
+  const n = typeof amount === 'number' ? amount : Number(amount)
+  if (!Number.isFinite(n)) return null
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(n)
+}
 
-export default function PriceTag({ value, collectedAt, overBudget = false }: PriceTagProps) {
+export default function PriceTag({
+  amount,
+  currency,
+  source,
+  collectedAt,
+  overBudget,
+  label,
+  compact = false,
+}: PriceTagProps) {
+  const formatted = amount === null ? null : formatAmount(amount, currency)
+  const date = collectedAt ? formatDate(collectedAt) : ''
+  const color = overBudget === undefined ? 'text-text' : overBudget ? 'text-danger' : 'text-success'
+
+  if (formatted === null) {
+    return (
+      <span className={`${compact ? 'text-xs' : 'text-sm'} text-muted`}>
+        {label ? `${label}: ` : ''}Sem preço
+      </span>
+    )
+  }
+
   return (
-    <div className="inline-flex flex-col">
-      <span
-        className={`font-mono text-base font-semibold ${overBudget ? 'text-danger' : 'text-success'}`}
-      >
-        {currency.format(value)}
+    <span className={compact ? 'text-xs' : 'text-sm'}>
+      {label && <span className="text-muted">{label}: </span>}
+      <span className={`font-mono font-semibold ${color}`}>{formatted}</span>{' '}
+      <span className="text-muted">
+        ({source}){date && ` · ${date}`}
       </span>
-      <span className="text-xs text-muted">
-        Preço LigaMagic em {dateFormat.format(new Date(collectedAt))}
-      </span>
-    </div>
+    </span>
   )
 }

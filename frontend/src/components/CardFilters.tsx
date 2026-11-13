@@ -236,6 +236,37 @@ export default function CardFilters({ filters, onChange, onReset }: Props) {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="f-price-min" className={labelClass}>
+              Preço (US$) mín.
+            </label>
+            <input
+              id="f-price-min"
+              type="number"
+              min={0}
+              step={0.01}
+              value={filters.priceMin}
+              onChange={(e) => onChange({ priceMin: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="f-price-max" className={labelClass}>
+              Preço (US$) máx.
+            </label>
+            <input
+              id="f-price-max"
+              type="number"
+              min={0}
+              step={0.01}
+              value={filters.priceMax}
+              onChange={(e) => onChange({ priceMax: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+        </div>
+
         <div>
           <label htmlFor="f-text" className={labelClass}>
             Texto da carta
@@ -295,6 +326,7 @@ export default function CardFilters({ filters, onChange, onReset }: Props) {
           >
             <option value="name">Nome</option>
             <option value="cmc">CMC</option>
+            <option value="price">Preço</option>
           </select>
         </div>
 

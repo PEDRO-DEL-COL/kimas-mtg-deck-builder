@@ -15,6 +15,12 @@ export interface CardSummary {
   rarity: string | null
   legal_commander: boolean
   image_url: string | null
+  price_usd: string | null
+  price_usd_foil: string | null
+  price_usd_etched: string | null
+  prices_updated_at: string | null
+  price_currency: 'USD'
+  price_source: string
 }
 
 export interface CardDetail extends CardSummary {
@@ -39,10 +45,12 @@ export interface CardSearchParams {
   subtype?: string
   cmc_min?: number
   cmc_max?: number
+  price_min?: number
+  price_max?: number
   text?: string
   rarity?: string
   commander_legal?: boolean
-  sort?: 'name' | 'cmc'
+  sort?: 'name' | 'cmc' | 'price'
   page?: number
   page_size?: number
 }

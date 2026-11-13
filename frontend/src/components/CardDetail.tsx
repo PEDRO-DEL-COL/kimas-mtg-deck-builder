@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCard } from '../api/cards.ts'
 import type { CardDetail as CardDetailData } from '../api/cards.ts'
+import PriceTag from './PriceTag.tsx'
 import { COLOR_NAMES, RARITY_LABELS } from '../lib/filters.ts'
 
 interface Props {
@@ -150,6 +151,31 @@ export default function CardDetail({ cardId, onClose }: Props) {
                     : 'Incolor'}
                 </dd>
               </dl>
+              <div className="space-y-1">
+                {(
+                  [
+                    ['Normal', card.price_usd],
+                    ['Foil', card.price_usd_foil],
+                    ['Etched', card.price_usd_etched],
+                  ] as const
+                )
+                  .filter(([label, amount]) => label === 'Normal' || amount !== null)
+                  .map(([label, amount]) => (
+                    <div key={label}>
+                      <PriceTag
+                        label={label}
+                        amount={amount}
+                        currency={card.price_currency}
+                        source={card.price_source}
+                        collectedAt={card.prices_updated_at}
+                      />
+                    </div>
+                  ))}
+                <p className="text-xs text-muted">
+                  Preço em dólar americano fornecido pelo Scryfall. Estimativa em reais (R$) ainda
+                  não disponível.
+                </p>
+              </div>
               {card.scryfall_uri && (
                 <a
                   href={card.scryfall_uri}
