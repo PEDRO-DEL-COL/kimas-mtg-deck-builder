@@ -14,7 +14,8 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 ## 2. Current status
 - Version: **v0.1.0** (pre-release, skeleton). SemVer; changes logged in `CHANGELOG.md` (Keep a Changelog).
 - Roadmap step 1 (skeleton) done, except Docker Compose is written but **untested** (no Docker on the dev machine).
-- Supabase project **not created yet** (waiting for `SUPABASE_ACCESS_TOKEN`).
+- Supabase project **not created yet**: the token works for projects, but the user's org (`PEDRO-DEL-COL's Org`, plan **Free**) already has 2 active projects (Free limit). Waiting for the user to decide: pause one of the others, or upgrade the org. Never touch the other projects without asking. `SUPABASE_ACCESS_TOKEN` is a user-level env var on the dev machine (never commit it; the user should rotate it, it was pasted in chat).
+- Repo location (since 2026-11-13): `C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder` (moved out of OneDrive).
 
 ## 3. DONE
 - [x] Git repo, `main` branch, `.gitignore` (OneDrive-safe: node_modules, .venv, caches, .env, *.db ignored)
@@ -30,6 +31,7 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 - [x] Frontend quality: ESLint (flat) + Prettier, lint/typecheck/format:check/build passing
 - [x] `docker-compose.yml` (db, api, web, worker) + Dockerfiles — **written, untested**
 - [x] `.env.example` (placeholders only), `.pre-commit-config.yaml`, GitHub Actions CI (`.github/workflows/ci.yml`)
+- [x] pre-commit installed in `backend/.venv` (LICENSE excluded from whitespace hooks to keep the official text)
 - [x] README (PT-BR), CONTRIBUTING (PT-BR), CHANGELOG, this file, `CLAUDE.md`
 - [x] Tag `v0.1.0` + GitHub pre-release
 
@@ -48,7 +50,9 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
    - [ ] Frontend deck builder: commander pick, add/remove, group by type and mana curve, 100-card counter, live budget meter.
    - [ ] Import/export plain text lists ("1 Card Name") compatible with LigaMagic, Moxfield, TopDecked.
 4. **LigaMagic prices (step 4)**
-   - [ ] **Before any production scraping: read LigaMagic Terms of Use and robots.txt and ask the user/LigaMagic for permission.**
+   - [x] Research done 2026-11-13: robots.txt for `*` sets `Crawl-delay: 360` (1 req / 6 min) and blocks price-history and several other paths; all pages return HTTP 403 (Cloudflare) to automated clients; Terms of Use could not be read; no official API/feed found. Contact (unconfirmed): suporte@ligamagic.com.br. **Verdict: do NOT scrape without written permission.**
+   - [ ] Email LigaMagic asking permission/feed (hobby, open source, low volume, identified User-Agent, credit + link).
+   - [ ] Fallback while waiting: Scryfall USD/EUR prices converted to BRL via an FX API, labelled "estimativa" with date, plus a plain search link to LigaMagic (no data collected).
    - [ ] `scrapers/ligamagic.py` parser tested with saved HTML fixtures (`backend/tests/fixtures/`).
    - [ ] Price job every 3 days (APScheduler worker), polite rate limit (>= `LIGAMAGIC_MIN_DELAY_SECONDS`), identified User-Agent, off-peak, prioritise cards in decks/recently searched; on failure keep last valid price.
    - [ ] On-demand single-card refresh; `price_runs` bookkeeping.
@@ -84,7 +88,7 @@ Full spec (Portuguese): `docs/SPEC.md` — the source of truth for scope.
 | **Supabase** as hosted Postgres | Free managed Postgres (pg_trgm available) without running Docker locally; access via plain `DATABASE_URL`, so the app stays provider-agnostic. |
 | SQLite default for local dev | Zero-install dev on a machine without Docker; Alembic migrations kept portable. |
 | **No Docker locally** | Not installed; Compose files are maintained but verified only when Docker is available (or in CI later). |
-| **OneDrive caveat** | Repo lives in OneDrive: heavy dirs (`node_modules`, `.venv`, caches, `dist`) are gitignored; avoid huge installs/data dumps in the folder (put Scryfall bulk files outside or in ignored `data/`). Consider moving the repo out of OneDrive if sync causes file-lock issues. |
+| **OneDrive caveat (resolved)** | Repo was moved to `C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder` (outside OneDrive). Previously in OneDrive: heavy dirs (`node_modules`, `.venv`, caches, `dist`) are gitignored; avoid huge installs/data dumps in the folder (put Scryfall bulk files outside or in ignored `data/`). Consider moving the repo out of OneDrive if sync causes file-lock issues. |
 | **LigaMagic scraping** | No official API. Must check ToS and robots.txt and **ask permission before production**; credits/links do not replace permission. Polite rate limits, identified User-Agent. |
 | **Prices always read from DB** with collection date | Never hit LigaMagic during user browsing; every price shown as "Preço LigaMagic em DD/MM/AAAA"; failures keep the last valid price. |
 | Money as `Decimal` / `Numeric(10,2)` | Exact BRL budget comparisons (5.00 / 10.00 boundaries). |

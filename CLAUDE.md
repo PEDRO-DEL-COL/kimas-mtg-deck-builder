@@ -31,6 +31,6 @@ At the end of every session, update `docs/PROJECT_STATE.md` (status, checklist, 
 - Keep reports and summaries short.
 
 ## Environment notes
-- Repo is inside OneDrive: keep `node_modules`, `.venv`, caches and data dumps gitignored; avoid heavy installs here.
+- Repo lives outside OneDrive (`C:/Users/Pedro.Col/Documents/kimas-mtg-deck-builder` on the main dev machine). Keep `node_modules`, `.venv`, caches and data dumps gitignored.
 - Windows dev machine; no Docker and no Supabase CLI locally (`npx supabase` acceptable).
 - The path contains `´` (Pedro´s Codes): quote paths in shell commands.
