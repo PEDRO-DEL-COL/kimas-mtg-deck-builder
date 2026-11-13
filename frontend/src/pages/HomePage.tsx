@@ -28,21 +28,24 @@ export default function HomePage() {
         </p>
         <form
           className="mx-auto flex max-w-xl flex-col gap-2 sm:flex-row"
-          onSubmit={(e) => e.preventDefault()}
+          onSubmit={(e) => {
+            e.preventDefault()
+            const q = String(new FormData(e.currentTarget).get('q') ?? '').trim()
+            window.location.hash = q ? `#/busca?q=${encodeURIComponent(q)}` : '#/busca'
+          }}
         >
           <input
             type="search"
-            disabled
-            placeholder="Buscar cartas (em breve)"
-            aria-label="Buscar cartas (em breve)"
-            className="flex-1 rounded-card border border-border bg-surface px-4 py-3 text-text placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
+            name="q"
+            placeholder="Buscar cartas pelo nome"
+            aria-label="Buscar cartas pelo nome"
+            className="flex-1 rounded-card border border-border bg-surface px-4 py-3 text-text placeholder:text-muted focus:border-primary focus:outline-none"
           />
           <button
             type="submit"
-            disabled
-            className="rounded-card bg-primary px-5 py-3 font-semibold text-white shadow-card hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-card bg-primary px-5 py-3 font-semibold text-white shadow-card hover:bg-primary-hover"
           >
-            Em breve
+            Buscar
           </button>
         </form>
       </section>
