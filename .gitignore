@@ -1,0 +1,47 @@
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- Local databases ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.vite/
+npm-debug.log*
+
+# --- Data dumps (Scryfall bulk, scraped HTML caches) ---
+data/
+!backend/tests/fixtures/**
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+
+# --- Claude Code local settings ---
+.claude/settings.local.json
