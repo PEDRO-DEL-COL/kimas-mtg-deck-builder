@@ -23,17 +23,22 @@ _INDEXES = {
 
 def upgrade() -> None:
     # SQLite has no trigram support and simply falls back to plain LIKE scans.
-    if op.get_bind().dialect.name != "postgresql":
+    # get_context() (not get_bind()) so that offline `--sql` mode works too.
+    if op.get_context().dialect.name != "postgresql":
         return
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    # Keep the extension out of `public` (Supabase convention); the schema is
+    # created when missing so this also works on plain Postgres.
+    op.execute("CREATE SCHEMA IF NOT EXISTS extensions")
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions")
     for index, column in _INDEXES.items():
         op.execute(
-            f"CREATE INDEX IF NOT EXISTS {index} ON cards USING gin (lower({column}) gin_trgm_ops)"
+            f"CREATE INDEX IF NOT EXISTS {index} ON cards "
+            f"USING gin (lower({column}) extensions.gin_trgm_ops)"
         )
 
 
 def downgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
+    if op.get_context().dialect.name != "postgresql":
         return
     for index in _INDEXES:
         op.execute(f"DROP INDEX IF EXISTS {index}")
